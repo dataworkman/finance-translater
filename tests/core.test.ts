@@ -1,0 +1,18 @@
+import {test} from "node:test";
+import assert from "node:assert/strict";
+import {calculate,comparable,fcf,margin,yoy} from "../lib/finance/calculations";
+import {detectSignals} from "../lib/finance/signals";
+import {validateExplanation} from "../services/explanation/schema";
+import {mockExplanation} from "../services/explanation/explanation-service";
+import {companies} from "../lib/companies";
+import {FinancialData} from "../lib/finance/types";
+import {readFile} from "node:fs/promises";
+import {normalize,CompanyFacts,Fact} from "../lib/sec/normalize";
+const demo=async(t="aapl")=>JSON.parse(await readFile(`data/demo/${t}.json`,"utf8")) as FinancialData;
+test("YoY uses code; missing, zero and negative bases unavailable",()=>{assert.equal(yoy(120,100),20);assert.equal(yoy(2,0),null);assert.equal(yoy(2,-1),null);assert.equal(yoy(null,1),null);});
+test("Operating margin and FCF",()=>{assert.equal(margin(15,100),15);assert.equal(margin(1,0),null);assert.equal(fcf(40,7),33);assert.equal(fcf(null,7),null);});
+test("Matched periods required; YTD and annual comparisons rejected",async()=>{const d=await demo();assert.ok(comparable(d.current,d.previous));assert.equal(comparable(d.current,{...d.previous,kind:"annual"}),false);assert.equal(comparable(d.current,{...d.previous,fiscalQuarter:2}),false);assert.equal(comparable({...d.current,start:"2026-01-01"},d.previous),false);const f=calculate({...d,previous:{...d.previous,kind:"annual"}});assert.equal(f.derived.revenue_yoy,null);assert.deepEqual(detectSignals(f),[]);});
+test("Signals are at most three, deterministic, and explain mixed evidence",async()=>{const f=calculate(await demo());const s=detectSignals(f);assert.ok(s.length<=3);assert.deepEqual(s,detectSignals(f));assert.ok(s.some(x=>x.key==="margin"&&x.classification==="negative"));});
+test("Structured output rejects invalid and advisory text",()=>{assert.throws(()=>validateExplanation({headline:"Incomplete"}));const v={headline:"Neutral",what_happened:"Facts",plain_english:"Meaning",why_it_matters:"Context",watch_next:"More data"};assert.deepEqual(validateExplanation(v),v);assert.throws(()=>validateExplanation({...v,watch_next:"Buy this stock"}));});
+test("Five demos calculate without keys; mock explains meaning",async()=>{for(const c of companies){const financialData=calculate(await demo(c.ticker.toLowerCase()));assert.ok(financialData.comparable);const e=mockExplanation({company:c,financialData,signals:detectSignals(financialData)});assert.ok(e.plain_english.length>40);validateExplanation(e);}});
+test("SEC normalizer excludes cumulative cash flow and missing debt",()=>{const mk=(start:string,end:string,val:number,accn:string,fy:number):Fact=>({start,end,val,accn,fy,fp:"Q3",form:"10-Q",filed:"2026-10-01"});const a=mk("2026-07-01","2026-09-30",120,"new",2026),b=mk("2025-07-01","2025-09-30",100,"old",2025);const facts:CompanyFacts={facts:{"us-gaap":{Revenues:{units:{USD:[a,b]}},OperatingIncomeLoss:{units:{USD:[{...a,val:20},{...b,val:15}]}},NetCashProvidedByUsedInOperatingActivities:{units:{USD:[{...a,start:"2026-01-01",val:50}]}}}}};const data=normalize(facts,{accession:"new",form:"10-Q",filed:"2026-10-01",end:"2026-09-30",url:"https://www.sec.gov/example"});assert.equal(data.metrics.revenue.current,120);assert.equal(data.metrics.operating_cash_flow.current,null);assert.equal(data.metrics.total_debt.current,null);assert.equal(calculate(data).derived.revenue_yoy,20);});

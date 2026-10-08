@@ -1,0 +1,1 @@
+export const defaultStyleGuide="Explain meaning before jargon. Define each financial term on first use. Use short sentences. Explain conflicting signals together. Separate supplied facts from interpretation. Explain why numbers matter. Never offer investment advice.";

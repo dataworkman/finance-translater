@@ -1,0 +1,66 @@
+generator client {
+ provider = "prisma-client-js"
+ engineType = "client"
+}
+datasource db {
+ provider = "sqlite"
+ url = env("DATABASE_URL")
+}
+model Company {
+ id Int @id @default(autoincrement())
+ ticker String @unique
+ name String
+ cik String
+ createdAt DateTime @default(now())
+ filings Filing[]
+ analyses Analysis[]
+}
+model Filing {
+ id Int @id @default(autoincrement())
+ companyId Int
+ company Company @relation(fields: [companyId], references: [id])
+ formType String
+ filingDate String
+ periodEnd String
+ accessionNumber String
+ sourceUrl String
+ metrics FinancialMetric[]
+ analyses Analysis[]
+ @@unique([companyId, accessionNumber])
+}
+model FinancialMetric {
+ id Int @id @default(autoincrement())
+ filingId Int
+ filing Filing @relation(fields: [filingId], references: [id])
+ metricName String
+ value Float
+ unit String
+ periodStart String?
+ periodEnd String
+}
+model Analysis {
+ id Int @id @default(autoincrement())
+ companyId Int
+ company Company @relation(fields: [companyId], references: [id])
+ filingId Int
+ filing Filing @relation(fields: [filingId], references: [id])
+ cacheKey String @unique
+ financialDataJson String
+ signalsJson String
+ analysisJson String
+ model String
+ generatedAt DateTime @default(now())
+ evaluations Evaluation[]
+}
+model Evaluation {
+ id Int @id @default(autoincrement())
+ analysisId Int
+ analysis Analysis @relation(fields: [analysisId], references: [id])
+ accuracy Int
+ simplicity Int
+ relevance Int
+ evidence Int
+ neutrality Int
+ notes String
+ createdAt DateTime @default(now())
+}

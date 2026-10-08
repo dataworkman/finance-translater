@@ -1,0 +1,1 @@
+export default function NotFound(){return <main><h1>Company not supported</h1><a href="/">Back to the five supported companies</a></main>;}
